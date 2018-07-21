@@ -1,0 +1,18 @@
+{
+  "debug": false,
+  "wskey": "",
+  "email": {
+    "from": {
+      "email": "",
+      "server": {
+        "address": "",
+        "port": "",
+        "password": ""
+      }
+    },
+    "to": {
+      "email": ""
+    }
+  },
+  "collections": []
+}

@@ -4,6 +4,7 @@
 
 
 import csv
+import json
 import re
 import requests
 import urllib3
@@ -24,7 +25,7 @@ from email.mime.text import MIMEText
 def queryBuilder(collectionName):
 
     parameters = "&link@rel=enclosure"
-    myKey = "wskey=ThisIsMyWsApiKey"
+    myKey = "wskey=" + config['wskey']
     myQuery = "https://worldcat.org/webservices/kb/rest/collections/" + collectionName + myKey + parameters
 
     return myQuery
@@ -47,13 +48,13 @@ def matchKbartFilePattern(xmlOutput):
 def kbartDownloadUrl(kbartUrl):
 
     myUrl = kbartUrl +"?"
-    myKey = "wskey=ThisIsMyWsApiKey"
+    myKey = "wskey=" + config['wskey']
     myKbartUrl = myUrl + myKey
 
     return myKbartUrl
 
 def kbartReader(myUrl):
-   
+
     urlOutput = urllib.request.urlopen(myUrl)
     csvfile = csv.reader(codecs.iterdecode(urlOutput, 'utf-8'))
 
@@ -93,7 +94,7 @@ def testUrl(currentUrl):
                 currentUrlWithSlash = currentUrl + "/"
                 matchCurrentUrlWithSlash = re.match(newUrl, currentUrlWithSlash)
                 newUrlWithSlash = newUrl + "/"
-                matchNewUrlWithSlash = re.match(newUrlWithSlash, line)
+                matchNewUrlWithSlash = re.match(newUrlWithSlash, currentUrlWithSlash) # A's best guess what is supposed to be here, since `line` doesn't make any sense.
                 if matchFound:
                     status = "ok"
                 elif matchCurrentUrlWithSlash:
@@ -110,7 +111,7 @@ def testUrl(currentUrl):
 
     except urllib3.exceptions.LocationValueError:
         status = "error"
-    
+
     except UnicodeError:
         status = "error"
 
@@ -126,7 +127,7 @@ def statusSorting(status, currentLine, currentUrl, errorFoundArray, redirectsArr
             newUrl = r.url
             currentLine[9] = newUrl
             redirectsArray.append(currentLine)
-            
+
 #Print in file
 def printFile(myArray, filename):
 
@@ -136,17 +137,16 @@ def printFile(myArray, filename):
         writerFile.writerow(line)
 
 #Send emails
-        
-# The following two email functions have been adapted from a code shared by Rob (user:8747) on stack overflow. 
+
+# The following two email functions have been adapted from a code shared by Rob (user:8747) on stack overflow.
 # https://stackoverflow.com/questions/41469952/sending-an-email-via-the-python-email-library-throws-error-expected-string-or-b
 
 def email(fromEmail, toEmail, filename, message):
 
     msg = MIMEMultipart()
     msg['Subject'] = 'Report| Problematic links in Open Access Collection'
-    msg['From'] = fromEmail
-    msg['To'] = toEmail
-    msg.preamble = 'preamble'
+    msg['From'] = fromEmail['email']
+    msg['To'] = toEmail['email']
 
     body = MIMEText(message)
     msg.attach(body)
@@ -156,37 +156,40 @@ def email(fromEmail, toEmail, filename, message):
         record['Content-Disposition'] = 'attachment; filename=' + filename
         msg.attach(record)
 
-    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server = smtplib.SMTP(fromEmail['server']['address'], fromEmail['server']['port'])
     server.ehlo()
     server.starttls()
-    server.login(fromEmail, "myPassword")
-    server.sendmail(fromEmail, toEmail, msg.as_string())
+    server.login(fromEmail['email'], fromEmail['server']['password'])
+    server.sendmail(fromEmail['email'], toEmail['email'], msg.as_string())
     server.quit()
 
-    
- def noReportsEmail(fromEmail, toEmail, message):
+
+def noReportsEmail(fromEmail, toEmail, message):
 
     msg = MIMEMultipart()
     msg['Subject'] = 'Report| Problematic links in Open Access Collection'
-    msg['From'] = fromEmail
-    msg['To'] = toEmail
+    msg['From'] = fromEmail['email']
+    msg['To'] = toEmail['email']
 
     body = MIMEText(message)
     msg.attach(body)
 
-    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server = smtplib.SMTP(fromEmail['server']['address'], fromEmail['server']['port'])
     server.ehlo()
     server.starttls()
-    server.login(fromEmail, "myPassword")
-    server.sendmail(fromEmail, toEmail, msg.as_string())
+    server.login(fromEmail['email'], fromEmail['server']['password'])
+    server.sendmail(fromEmail['email'], toEmail['email'], msg.as_string())
     server.quit()
 
 
 ###################
-#    Main Code   
+#    Main Code
 ###################
 
-collectionsArray = ["ThisIsMyCollectionID", "ThisIsMyCollectionID2", "ThisIsMyCollectionID3"]
+with open('config.json', 'r', encoding='utf-8') as configFile:
+    config = json.load(configFile)
+
+collectionsArray = config['collections']
 
 for collection in collectionsArray:
 
@@ -196,38 +199,42 @@ for collection in collectionsArray:
     myUrl = queryBuilder(collection + "?")
     xmlOutput = callQuery(myUrl)
     myKbartUrl = matchKbartFilePattern(xmlOutput)
-
     myKbart = kbartDownloadUrl(myKbartUrl[0])
     csvfile = kbartReader(myKbart)
-    
+
+    count = 0
+
     for line in csvfile:
         cleanedLineArray = lineCleaner(line)
-       
+
         if cleanedLineArray[0] != "publication_title":
             cleanedCurrentUrl = stringCleaner(cleanedLineArray[9])
             urlStatus = testUrl(cleanedCurrentUrl)
             statusSorting(urlStatus, cleanedLineArray, cleanedCurrentUrl, errorFoundArray, redirectsArray)
 
-            
+        count = count + 1
+
+        if (config['debug']):
+            print('Checked line ' + str(count) + '.')
+
+            if (count > 10):
+                break
+
     if len(redirectsArray) > 0:
         printFileName = "openAccess_redirects_results_" + collection + ".csv"
         message = "Report of redirecting links in collection " + collection+ ". The links have been corrected in the attached file."
 
         printFile(redirectsArray, printFileName)
-        email("fromEmail@gmail.com", "toEmail@email.ca", printFileName, message)
+        email(config['email']['from'], config['email']['to'], printFileName, message)
 
     if len(errorFoundArray) > 0:
         printFileName = "openAccess_errors_results_" + collection + ".csv"
         message = "Report of broken links in collection " + collection + "."
 
         printFile(errorFoundArray, printFileName)
-        email("fromEmail@gmail.com", "toEmail@email.ca", printFileName, message)
-    
+        email(config['email']['from'], config['email']['to'], printFileName, message)
+
     elif len(errorFoundArray) == 0 and len(redirectsArray) == 0:
-        message = "No broken or redirecting links were found in collection: " + collection + "." 
+        message = "No broken or redirecting links were found in collection: " + collection + "."
 
-        noReportsEmail("fromEmail@gmail.com", "toEmail@email.ca", message)
-
-
-
-
+        noReportsEmail(config['email']['from'], config['email']['to'], message)
