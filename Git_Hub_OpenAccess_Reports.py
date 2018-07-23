@@ -198,10 +198,10 @@ for collection in collectionsArray:
     myUrl = queryBuilder(collection + "?")
     xmlOutput = callQuery(myUrl)
     myKbartUrl = matchKbartFilePattern(xmlOutput)
-    kbartUrlArray.append(kbartDownloadUrl(myKbartUrl[0]))
+    kbartUrlArray.append((collection, kbartDownloadUrl(myKbartUrl[0])))
 
 for collection in localCollectionsArray:
-    kbartUrlArray.append('file:' + urllib.request.pathname2url(collection))
+    kbartUrlArray.append((collection, 'file:' + urllib.request.pathname2url(collection)))
 
 if (config['debug']):
     print(kbartUrlArray)
@@ -211,7 +211,7 @@ for collection in kbartUrlArray:
     errorFoundArray = []
     redirectsArray = []
 
-    csvfile = kbartReader(collection)
+    csvfile = kbartReader(collection[1])
 
     count = 0
 
@@ -232,20 +232,20 @@ for collection in kbartUrlArray:
                 break
 
     if len(redirectsArray) > 0:
-        printFileName = "openAccess_redirects_results_" + collection + ".csv"
-        message = "Report of redirecting links in collection " + collection+ ". The links have been corrected in the attached file."
+        printFileName = "openAccess_redirects_results_" + collection[0] + ".csv"
+        message = "Report of redirecting links in collection " + collection[0] + ". The links have been corrected in the attached file."
 
         printFile(redirectsArray, printFileName)
         email(config['email']['from'], config['email']['to'], printFileName, message)
 
     if len(errorFoundArray) > 0:
-        printFileName = "openAccess_errors_results_" + collection + ".csv"
-        message = "Report of broken links in collection " + collection + "."
+        printFileName = "openAccess_errors_results_" + collection[0] + ".csv"
+        message = "Report of broken links in collection " + collection[0] + "."
 
         printFile(errorFoundArray, printFileName)
         email(config['email']['from'], config['email']['to'], printFileName, message)
 
     elif len(errorFoundArray) == 0 and len(redirectsArray) == 0:
-        message = "No broken or redirecting links were found in collection: " + collection + "."
+        message = "No broken or redirecting links were found in collection: " + collection[0] + "."
 
         noReportsEmail(config['email']['from'], config['email']['to'], message)
