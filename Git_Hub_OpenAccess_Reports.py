@@ -190,17 +190,28 @@ with open('config.json', 'r', encoding='utf-8') as configFile:
     config = json.load(configFile)
 
 collectionsArray = config['collections']
+localCollectionsArray = config['localcollections']
+
+kbartUrlArray = []
 
 for collection in collectionsArray:
+    myUrl = queryBuilder(collection + "?")
+    xmlOutput = callQuery(myUrl)
+    myKbartUrl = matchKbartFilePattern(xmlOutput)
+    kbartUrlArray.append(kbartDownloadUrl(myKbartUrl[0]))
+
+for collection in localCollectionsArray:
+    kbartUrlArray.append('file:' + urllib.request.pathname2url(collection))
+
+if (config['debug']):
+    print(kbartUrlArray)
+
+for collection in kbartUrlArray:
 
     errorFoundArray = []
     redirectsArray = []
 
-    myUrl = queryBuilder(collection + "?")
-    xmlOutput = callQuery(myUrl)
-    myKbartUrl = matchKbartFilePattern(xmlOutput)
-    myKbart = kbartDownloadUrl(myKbartUrl[0])
-    csvfile = kbartReader(myKbart)
+    csvfile = kbartReader(collection)
 
     count = 0
 
