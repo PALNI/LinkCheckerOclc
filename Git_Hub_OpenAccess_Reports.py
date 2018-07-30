@@ -15,6 +15,7 @@ from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from argparse import ArgumentParser
 
 
 ###################
@@ -186,9 +187,53 @@ def noReportsEmail(fromEmail, toEmail, message):
 #    Main Code
 ###################
 
-with open('config.json', 'r', encoding='utf-8') as configFile:
-    config = json.load(configFile)
+# Read in command line arguments.
+parser = ArgumentParser(description="This program queries OCLC's Knowledge Base API for a particular collection (using the collection ID) or parses a local KBART file and sends a report (KBART as attachment) by email of all the redirecting and broken links. This program has been designed to check Open Access collections.", epilog="If both a config file and optional parameters are defined, the config file values will be overwritten by the optional parameters which are defined.")
 
+parser.add_argument('-c', '--config', dest='config', metavar='config', default='config.json')
+parser.add_argument('-d', '--debug', action='store_const', const=True, dest='debug', metavar='debug', default=False)
+parser.add_argument('-w', '--wskey', dest='wskey', metavar='wskey')
+parser.add_argument('-k', '--kbcollections', dest='collections', metavar='collections', nargs='+', help="The OCLC KB collection identifiers of collections to scan.")
+parser.add_argument('-l', '--local', '--localcollections', dest='localcollections', metavar='localcollections', nargs='+', help="The names of local KBART files for collections to scan.")
+parser.add_argument('-f', '--from', dest='fromEmail', metavar='fromEmail')
+parser.add_argument('-t', '--to', dest='toEmail', metavar='toEmail')
+parser.add_argument('-s', '--server', '--emailserver', dest='server', metavar='server', nargs=3, help="The address, port, and password (used with the 'fromEmail' account) of the server from which to send email.")
+
+arguments = parser.parse_args()
+
+try:
+    with open(arguments.config, 'r', encoding='utf-8') as configFile:
+        config = json.load(configFile)
+except FileNotFoundError as err:
+    with open('config_template.json', 'r', encoding='utf-8') as configFile:
+        config = json.load(configFile)
+
+# arguments.debug is always set. There is no way to turn off debug if it is set in the config file.
+if arguments.debug:
+    config['debug'] = True
+
+# If optional arguments were submitted, overwrite the values in the config file.
+if arguments.wskey is not None:
+    config['wskey'] = arguments.wskey
+
+if arguments.collections is not None:
+    config['collections'] = arguments.collections
+
+if arguments.localcollections is not None:
+    config['localcollections'] = arguments.localcollections
+
+if arguments.fromEmail is not None:
+    config['email']['from']['email'] = arguments.fromEmail
+
+if arguments.toEmail is not None:
+    config['email']['to']['email'] = arguments.toEmail
+
+if arguments.server is not None:
+    config['email']['from']['server']['address'] = arguments.server[0]
+    config['email']['from']['server']['port'] = arguments.server[1]
+    config['email']['from']['server']['password'] = arguments.server[2]
+
+# Get ready to process the collections.
 collectionsArray = config['collections']
 localCollectionsArray = config['localcollections']
 
